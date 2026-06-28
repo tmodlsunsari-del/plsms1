@@ -65,7 +65,7 @@ export default function CitizenView() {
             />
           </div>
           <div className="text-center">
-            <h1 className="my-0.5 text-xs xs:text-sm sm:text-lg md:text-2xl font-black text-white tracking-normal leading-tight text-center break-words px-1">യാतायात व्यवस्था कार्यालय, सवारी चालक अनुमति पत्र</h1>
+            <h1 className="my-0.5 text-xs xs:text-sm sm:text-lg md:text-2xl font-black text-white tracking-normal leading-tight text-center break-words px-1">यातायात व्यवस्था कार्यालय, सवारी चालक अनुमति पत्र</h1>
             <p className="text-[11px] xs:text-xs sm:text-base md:text-xl font-bold text-white/95 mt-0.5 tracking-wide text-center break-words px-1">ईटहरी, सुनसरी</p>
           </div>
         </div>

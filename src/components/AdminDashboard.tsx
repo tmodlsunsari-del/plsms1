@@ -1067,7 +1067,7 @@ export default function AdminDashboard({ token, username, role, onLogout }: Admi
                     <div className="relative">
                       <input
                         type="text"
-                        placeholder="लाइसेन्स नं. वा नाम खोज्नुहोस्..."
+                        placeholder="लाइसेन्स नम्बर मात्र खोज्नुहोस्..."
                         value={licensesSearchTerm}
                         onChange={(e) => {
                           setLicensesSearchTerm(e.target.value);
@@ -1380,17 +1380,34 @@ export default function AdminDashboard({ token, username, role, onLogout }: Admi
               </div>
             )}
 
-        {/* Excel/CSV Lot Upload Wizard Panel */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8 space-y-6" id="upload-wizard-container">
-          <div className="space-y-1 pb-4 border-b border-gray-100">
-            <h3 className="text-base sm:text-lg font-black text-slate-800 uppercase flex items-center gap-2">
-              <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
-              फाइल अपलोड गर्नुहोस् (Select & Upload Lot File)
+        {role === "viewer" ? (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8 space-y-4 text-center mt-6" id="viewer-readonly-notice">
+            <div className="mx-auto bg-amber-50 p-4 rounded-full border border-amber-100 flex items-center justify-center w-16 h-16 text-amber-500">
+              <ShieldCheck className="w-8 h-8 animate-pulse" />
+            </div>
+            <h3 className="text-base sm:text-lg font-black text-slate-800 uppercase">
+              अवलोकनकर्ता मोड (Viewer - Read Only Mode)
             </h3>
-            <p className="text-xs text-gray-500">
-              एक्सेल (.xlsx) वा सी.एस.भी. (.csv) फाइल यहाँ राखेर डेटा आयात र प्रमाणीकरण गर्नुहोस्।
+            <p className="text-xs text-gray-500 max-w-xl mx-auto leading-relaxed">
+              तपाईं अहिले मात्र 'अवलोकनकर्ता' (Viewer - Read Only) मोडमा हुनुहुन्छ। नयाँ रेकर्ड अपलोड गर्न, रिसेट गर्न वा रिकभरी नियन्त्रण गर्न अनुमति छैन। विवरण अवलोकन गर्न र खोज गर्न माथिका कार्डहरू प्रयोग गर्न सक्नुहुन्छ।
+            </p>
+            <p className="text-xs text-amber-700 font-extrabold max-w-xl mx-auto leading-relaxed font-sans">
+              You are currently in 'Viewer' mode. File uploads, database resets, and recovery controls are restricted. You can browse stats, lot lists, and query records.
             </p>
           </div>
+        ) : (
+          <>
+            {/* Excel/CSV Lot Upload Wizard Panel */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8 space-y-6" id="upload-wizard-container">
+              <div className="space-y-1 pb-4 border-b border-gray-100">
+                <h3 className="text-base sm:text-lg font-black text-slate-800 uppercase flex items-center gap-2">
+                  <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                  फाइल अपलोड गर्नुहोस् (Select & Upload Lot File)
+                </h3>
+                <p className="text-xs text-gray-500">
+                  एक्सेल (.xlsx) वा सी.एस.भी. (.csv) फाइल यहाँ राखेर डेटा आयात र प्रमाणीकरण गर्नुहोस्।
+                </p>
+              </div>
 
 
 
@@ -1699,28 +1716,31 @@ export default function AdminDashboard({ token, username, role, onLogout }: Admi
                       }
                     }
                   }}
-                  className="w-1/2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3 rounded-lg text-[10px] sm:text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                  className={`${role === "super_user" ? "w-1/2" : "w-full"} bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3 rounded-lg text-[10px] sm:text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm`}
                 >
                   <PlusCircle className="w-3.5 h-3.5" />
                   नयाँ लट थप्नुहोस्
                 </button>
-                <button
-                  onClick={() => {
-                    setIsResetModalOpen(true);
-                    setResetConfirmationText("");
-                    setResetError("");
-                    setResetSuccess("");
-                  }}
-                  className="w-1/2 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-3 rounded-lg text-[10px] sm:text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  डेटा रिसेट र नयाँ लोड
-                </button>
+                {role === "super_user" && (
+                  <button
+                    onClick={() => {
+                      setIsResetModalOpen(true);
+                      setResetConfirmationText("");
+                      setResetError("");
+                      setResetSuccess("");
+                    }}
+                    className="w-1/2 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-3 rounded-lg text-[10px] sm:text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    डेटा रिसेट र नयाँ लोड
+                  </button>
+                )}
               </div>
             </div>
 
             {/* Button 4: Loss Prevention and Sudden Loss Date-Time Recovery Tool */}
-            <div className="bg-slate-50 rounded-xl p-5 border border-gray-200 md:col-span-2 space-y-4 shadow-sm hover:shadow-md transition-all">
+            {role === "super_user" && (
+              <div className="bg-slate-50 rounded-xl p-5 border border-gray-200 md:col-span-2 space-y-4 shadow-sm hover:shadow-md transition-all">
               <div className="space-y-1.5">
                 <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-100 rounded px-2 py-0.5 uppercase tracking-wider inline-block">
                   Button 4: Security & Sudden Loss Recovery Panel
@@ -1848,9 +1868,12 @@ export default function AdminDashboard({ token, username, role, onLogout }: Admi
                 </button>
               </div>
             </div>
+            )}
 
           </div>
         </div>
+          </>
+        )}
           </>
         )}
 
@@ -1923,6 +1946,7 @@ export default function AdminDashboard({ token, username, role, onLogout }: Admi
                       <option value="super_user">Super User (पूर्ण नियन्त्रण)</option>
                       <option value="admin_user">Admin User (अपलोड र व्यवस्थापन)</option>
                       <option value="staff">Office Staff (सामान्य कर्मचारी)</option>
+                      <option value="viewer">Viewer (अवलोकनकर्ता मात्र - Read Only)</option>
                     </select>
                   </div>
 

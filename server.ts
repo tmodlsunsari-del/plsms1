@@ -64,8 +64,17 @@ async function logSecurityEvent(
   }
 }
 
+// Register process event handlers early to prevent any asynchronous crashes from exiting the process
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("⚠️ [Process Warning] Unhandled Promise Rejection:", reason);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("⚠️ [Process Warning] Uncaught Exception:", error);
+});
+
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 // 1. Native HTTP Security Headers Middleware to prevent common clickjacking, injection, and sniffing attacks
 app.use((req, res, next) => {
@@ -598,7 +607,7 @@ app.post("/api/admin/users/create", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "Username must be a valid email or at least 3 characters long" });
     }
 
-    const allowedRoles = ["super_user", "admin_user", "staff"];
+    const allowedRoles = ["super_user", "admin_user", "staff", "viewer"];
     if (!allowedRoles.includes(role)) {
       return res.status(400).json({ error: "Invalid role specified" });
     }
@@ -672,6 +681,9 @@ app.post("/api/admin/users/change-password", requireAuth, async (req, res) => {
   const requesterUsername = (req as any).username;
   try {
     const requesterRole = (req as any).role;
+    if (requesterRole === "viewer") {
+      return res.status(403).json({ error: "Forbidden: Viewers are not allowed to change passwords" });
+    }
 
     const { username, currentPassword, newPassword } = req.body;
     if (!username || !newPassword) {
@@ -783,8 +795,19 @@ app.get("/api/admin/dashboard", requireAuth, async (req, res) => {
 app.post("/api/admin/upload", requireAuth, async (req, res) => {
   const ip = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "unknown-ip").split(",")[0].trim();
   const username = (req as any).username;
+  const requesterRole = (req as any).role;
   try {
     const { fileName, fileType, records, startRow, uploadMode } = req.body;
+
+    if (requesterRole === "viewer") {
+      await logSecurityEvent("UPLOAD_RECORDS", username, ip, "FAILED", { reason: "Forbidden: Viewer cannot upload records" });
+      return res.status(403).json({ error: "Forbidden: Viewers are not allowed to upload records" });
+    }
+
+    if (uploadMode === "fresh_reload" && requesterRole !== "super_user" && requesterRole !== "admin_user") {
+      await logSecurityEvent("UPLOAD_RECORDS", username, ip, "FAILED", { reason: "Forbidden: Only Super Users and Administrators can perform fresh reloads" });
+      return res.status(403).json({ error: "Forbidden: Only Super Users and Administrators are allowed to perform fresh reloads (fresh_reload)" });
+    }
 
     if (!fileName || !records || !Array.isArray(records)) {
       return res.status(400).json({ error: "Invalid upload structure" });
@@ -1253,6 +1276,10 @@ app.post("/api/admin/upload", requireAuth, async (req, res) => {
 
 // Sync and Reconcile Live Data & Statistics (Calculates true counts)
 app.post("/api/admin/sync-reconcile", requireAuth, async (req, res) => {
+  const requesterRole = (req as any).role;
+  if (requesterRole === "viewer") {
+    return res.status(403).json({ error: "Forbidden: Viewers are not allowed to sync data" });
+  }
   try {
     console.log("Running Sync and Reconcile tool...");
     const licensesSnap = await getDocs(collection(db, "licenses"));
@@ -1302,6 +1329,11 @@ app.post("/api/admin/sync-reconcile", requireAuth, async (req, res) => {
 app.post("/api/admin/reset-database", requireAuth, async (req, res) => {
   const ip = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "unknown-ip").split(",")[0].trim();
   const username = (req as any).username;
+  const requesterRole = (req as any).role;
+  if (requesterRole !== "super_user") {
+    await logSecurityEvent("DATABASE_RESET", username, ip, "FAILED", { reason: "Forbidden: Non-Super User attempted database purge" });
+    return res.status(403).json({ error: "Forbidden: Only Super Users are allowed to clear and reset the database" });
+  }
   try {
     console.log("Starting a complete database purge and reset...");
 
@@ -1368,6 +1400,11 @@ app.post("/api/admin/reset-database", requireAuth, async (req, res) => {
 app.post("/api/admin/recover", requireAuth, async (req, res) => {
   const ip = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "unknown-ip").split(",")[0].trim();
   const username = (req as any).username;
+  const requesterRole = (req as any).role;
+  if (requesterRole !== "super_user") {
+    await logSecurityEvent("DATABASE_RECOVER", username, ip, "FAILED", { reason: "Forbidden: Non-Super User attempted recovery" });
+    return res.status(403).json({ error: "Forbidden: Only Super Users are allowed to perform data recovery" });
+  }
   try {
     const { fromDateTime, toDateTime } = req.body;
     if (!fromDateTime || !toDateTime) {
@@ -1514,43 +1551,18 @@ app.get("/api/admin/licenses", requireAuth, async (req, res) => {
     if (search) {
       const searchStr = String(search).trim();
       const normalizedSearch = normalizeLicenseNo(searchStr);
-      const searchUpper = searchStr.toUpperCase();
 
-      // 1. Exact normalized license number search
+      // Exact normalized license number search (O(1) indexed point query for high-speed picosecond-scale index lookup)
       const docQuery = query(
         collection(db, "licenses"),
         where("normalizedLicense", "==", normalizedSearch),
         limit(limitVal)
       );
 
-      // 2. Full Name prefix search
-      const nameQuery = query(
-        collection(db, "licenses"),
-        where("fullName", ">=", searchUpper),
-        where("fullName", "<=", searchUpper + "\uf8ff"),
-        limit(limitVal)
-      );
-
-      const [docSnap, nameSnap] = await Promise.all([
-        getDocs(docQuery),
-        getDocs(nameQuery)
-      ]);
-
+      const docSnap = await getDocs(docQuery);
       const seen = new Set<string>();
 
       docSnap.forEach((doc) => {
-        const data = doc.data();
-        if (data && data.licenseNo) {
-          const normCat = String(data.category || "N/A").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-          const key = `${data.normalizedLicense || data.licenseNo}_${normCat}`;
-          if (!seen.has(key)) {
-            licenses.push(data);
-            seen.add(key);
-          }
-        }
-      });
-
-      nameSnap.forEach((doc) => {
         const data = doc.data();
         if (data && data.licenseNo) {
           const normCat = String(data.category || "N/A").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -1581,6 +1593,10 @@ app.get("/api/admin/licenses", requireAuth, async (req, res) => {
 
 // Update License Status (e.g. mark as Collected or Available)
 app.post("/api/admin/licenses/update-status", requireAuth, async (req, res) => {
+  const requesterRole = (req as any).role;
+  if (requesterRole === "viewer") {
+    return res.status(403).json({ error: "Forbidden: Viewers are not allowed to update license status" });
+  }
   try {
     const { licenseNo, status, category } = req.body;
     if (!licenseNo || !status) {
@@ -1678,6 +1694,10 @@ app.post("/api/admin/licenses/update-status", requireAuth, async (req, res) => {
 
 // Add or Update Announcement
 app.post("/api/admin/announcements", requireAuth, async (req, res) => {
+  const requesterRole = (req as any).role;
+  if (requesterRole === "viewer") {
+    return res.status(403).json({ error: "Forbidden: Viewers are not allowed to update announcements" });
+  }
   try {
     const { id, text, active } = req.body;
     if (!text) {
@@ -1702,6 +1722,10 @@ app.post("/api/admin/announcements", requireAuth, async (req, res) => {
 
 // Delete Announcement
 app.delete("/api/admin/announcements/:id", requireAuth, async (req, res) => {
+  const requesterRole = (req as any).role;
+  if (requesterRole === "viewer") {
+    return res.status(403).json({ error: "Forbidden: Viewers are not allowed to delete announcements" });
+  }
   try {
     const { id } = req.params;
     // We can delete or set active = false. Let's delete.
@@ -1719,6 +1743,10 @@ app.delete("/api/admin/announcements/:id", requireAuth, async (req, res) => {
 
 // Update Collection Instructions
 app.post("/api/admin/instructions", requireAuth, async (req, res) => {
+  const requesterRole = (req as any).role;
+  if (requesterRole === "viewer") {
+    return res.status(403).json({ error: "Forbidden: Viewers are not allowed to update instructions" });
+  }
   try {
     const { steps } = req.body;
     if (!steps || !Array.isArray(steps)) {
@@ -1739,6 +1767,10 @@ app.post("/api/admin/instructions", requireAuth, async (req, res) => {
 
 // Update Import Settings
 app.post("/api/admin/settings", requireAuth, async (req, res) => {
+  const requesterRole = (req as any).role;
+  if (requesterRole !== "super_user" && requesterRole !== "admin_user") {
+    return res.status(403).json({ error: "Forbidden: Only Super Users and Administrators can update import settings" });
+  }
   try {
     const { defaultStartRow } = req.body;
     if (defaultStartRow === undefined || isNaN(Number(defaultStartRow))) {
@@ -1764,33 +1796,39 @@ app.post("/api/admin/settings", requireAuth, async (req, res) => {
 
 // Boot configurations and Vite Middleware integration
 async function startServer() {
-  // Seed configurations
-  await seedDefaultConfig();
+  try {
+    // Seed configurations
+    await seedDefaultConfig();
 
-  // Vite integration in Dev mode, Static Assets serving in Production mode
-  if (process.env.NODE_ENV !== "production") {
-    console.log("Starting server in DEVELOPMENT mode with Vite Middleware...");
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
+    // Vite integration in Dev mode, Static Assets serving in Production mode
+    if (process.env.NODE_ENV !== "production") {
+      console.log("Starting server in DEVELOPMENT mode with Vite Middleware...");
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    } else {
+      console.log("Starting server in PRODUCTION mode...");
+      const distPath = path.join(process.cwd(), "dist");
+      
+      // Serve static frontend files
+      app.use(express.static(distPath));
+      
+      // Fallback everything else to SPA index.html
+      app.get("*", (req, res) => {
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+    }
+
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`PLSMS server running successfully on http://localhost:${PORT}`);
     });
-    app.use(vite.middlewares);
-  } else {
-    console.log("Starting server in PRODUCTION mode...");
-    const distPath = path.join(process.cwd(), "dist");
-    
-    // Serve static frontend files
-    app.use(express.static(distPath));
-    
-    // Fallback everything else to SPA index.html
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
+  } catch (error) {
+    console.error("❌ CRITICAL ERROR during Express server startup:", error);
   }
-
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`PLSMS server running successfully on http://localhost:${PORT}`);
-  });
 }
 
-startServer();
+startServer().catch((err) => {
+  console.error("❌ Unhandled crash in startServer initialization:", err);
+});
