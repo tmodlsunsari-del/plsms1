@@ -1,0 +1,10 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Lock down all collections to prevent direct, unauthenticated or unauthorized client-side tampering.
+    // Allow access only if the client is authenticated with our dedicated, secure system-backend service email.
+    match /{document=**} {
+      allow read, write: if request.auth != null && request.auth.token.email == "system-backend@plsms.local";
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Printed License Searching Management System (PLSMS)",
+  "description": "A portal for citizens of Itahari, Sunsari to check driving license card print availability, managed securely by the Transport Management Office admin dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

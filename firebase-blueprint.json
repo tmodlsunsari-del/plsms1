@@ -1,0 +1,139 @@
+{
+  "entities": {
+    "License": {
+      "title": "License",
+      "description": "Represents a printed driving license record available for collection.",
+      "type": "object",
+      "properties": {
+        "licenseNo": { "type": "string", "description": "The printed driving license number, primary search field." },
+        "applicantId": { "type": "string", "description": "Applicant identifier." },
+        "fullName": { "type": "string", "description": "Full name of the applicant." },
+        "fhName": { "type": "string", "description": "Father or husband's name." },
+        "category": { "type": "string", "description": "Vehicle category, e.g. A, B, B1, C." },
+        "codeNo": { "type": "string", "description": "Office code number." },
+        "officeVisitDay": { "type": "string", "description": "Specified day for office visit." },
+        "receivedBy": { "type": "string", "description": "Who received/authorized the license." },
+        "status": { "type": "string", "description": "Status of the card: Available, Collected, etc." },
+        "roomNo": { "type": "string", "description": "Collection counter or room number." },
+        "remarks": { "type": "string", "description": "Optional notes or remarks." },
+        "uploadId": { "type": "string", "description": "Reference to the Upload History Ledger ID." },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["licenseNo", "fullName"]
+    },
+    "UploadLedger": {
+      "title": "Upload Ledger",
+      "description": "Records permanent history of uploaded license files.",
+      "type": "object",
+      "properties": {
+        "uploadId": { "type": "string" },
+        "fileName": { "type": "string" },
+        "fileType": { "type": "string" },
+        "totalRecords": { "type": "integer" },
+        "newRecords": { "type": "integer" },
+        "duplicateSkipped": { "type": "integer" },
+        "uploadedBy": { "type": "string" },
+        "uploadDate": { "type": "string" },
+        "uploadTime": { "type": "string" }
+      },
+      "required": ["uploadId", "fileName", "totalRecords"]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "Office announcements or important notices.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string" },
+        "date": { "type": "string" },
+        "active": { "type": "boolean" }
+      },
+      "required": ["id", "text"]
+    },
+    "Instruction": {
+      "title": "Instruction",
+      "description": "Numbered steps of instructions for license collection.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "steps": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["id", "steps"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "System configuration parameters.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "defaultStartRow": { "type": "integer" }
+      },
+      "required": ["id", "defaultStartRow"]
+    },
+    "AdminUser": {
+      "title": "Admin User",
+      "description": "Administrative users for authentication and access control.",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "passwordHash": { "type": "string" },
+        "role": { "type": "string", "enum": ["super_user", "admin_user", "staff"] }
+      },
+      "required": ["username", "passwordHash", "role"]
+    },
+    "RejectedDuplicate": {
+      "title": "Rejected Duplicate",
+      "description": "Information about a parsed row that was rejected or skipped as a duplicate during Excel upload.",
+      "type": "object",
+      "properties": {
+        "licenseNo": { "type": "string" },
+        "normalizedLicense": { "type": "string" },
+        "applicantId": { "type": "string" },
+        "fullName": { "type": "string" },
+        "fhName": { "type": "string" },
+        "category": { "type": "string" },
+        "codeNo": { "type": "string" },
+        "officeVisitDay": { "type": "string" },
+        "receivedBy": { "type": "string" },
+        "status": { "type": "string" },
+        "uploadId": { "type": "string" },
+        "rejectionReason": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["licenseNo", "fullName", "uploadId", "rejectionReason"]
+    }
+  },
+  "firestore": {
+    "/licenses/{licenseId}": {
+      "schema": "License",
+      "description": "Collection of all driving licenses."
+    },
+    "/rejectedDuplicates/{dupId}": {
+      "schema": "RejectedDuplicate",
+      "description": "Collection of records identified as duplicates during upload."
+    },
+    "/uploadLedgers/{ledgerId}": {
+      "schema": "UploadLedger",
+      "description": "Ledger of all excel/csv upload events."
+    },
+    "/announcements/{announcementId}": {
+      "schema": "Announcement",
+      "description": "Important notices displayed on the home page."
+    },
+    "/instructions/{instructionId}": {
+      "schema": "Instruction",
+      "description": "Instructions for citizens on how to collect printed cards."
+    },
+    "/settings/{settingsId}": {
+      "schema": "Settings",
+      "description": "Admin settings like Excel/CSV default start row."
+    },
+    "/adminUsers/{username}": {
+      "schema": "AdminUser",
+      "description": "Store admin authentication hashes."
+    }
+  }
+}
