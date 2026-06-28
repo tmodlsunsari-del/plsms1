@@ -1,3 +1,9 @@
-git add .
-git commit -m "Fix Vercel routing"
-git push
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/:path*",
+      "destination": "/"
+    }
+  ]
+}
