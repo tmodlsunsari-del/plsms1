@@ -1,5 +1,8 @@
 import React, { useState } from "react";
 import { ShieldAlert, Key, User, ArrowLeft, Loader2, Lock } from "lucide-react";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth, db } from "../firebase";
+import { doc, getDoc } from "firebase/firestore";
 
 interface AdminLoginProps {
   onLoginSuccess: (token: string, username: string, role: string) => void;
@@ -23,26 +26,40 @@ export default function AdminLogin({ onLoginSuccess, onBack }: AdminLoginProps) 
     setError("");
 
     try {
-      const res = await fetch("/api/admin/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          username: username.trim(),
-          password: password,
-        }),
-      });
-
-      const data = await res.json();
-      if (res.ok && data.success) {
-        onLoginSuccess(data.token, data.username, data.role || "staff");
+      // Direct Firebase Authentication from React frontend
+      const email = username.includes("@") ? username.trim() : `${username.trim()}@gmail.com`;
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      const idToken = await user.getIdToken();
+      
+      // Fetch role from Firestore adminUsers collection
+      const userDocRef = doc(db, "adminUsers", user.email || username.trim());
+      const userSnap = await getDoc(userDocRef);
+      let role = "staff";
+      if (userSnap.exists()) {
+        role = userSnap.data().role || "staff";
       } else {
-        setError(data.error || "लगइन असफल भयो। युजरनेम वा पासवर्ड गलत छ।");
+        // Fallback: Check if document ID matches prefix (e.g., if Firestore ID is "admin" but email is "admin@gmail.com")
+        const prefix = (user.email || "").split("@")[0];
+        const prefixDocRef = doc(db, "adminUsers", prefix);
+        const prefixSnap = await getDoc(prefixDocRef);
+        if (prefixSnap.exists()) {
+          role = prefixSnap.data().role || "staff";
+        }
       }
-    } catch (err) {
-      console.error("Login request error:", err);
-      setError("सर्भरसँग जडान हुन सकेन। कृपया पछि पुनः प्रयास गर्नुहोस्।");
+
+      onLoginSuccess(idToken, user.email || username.trim(), role);
+    } catch (err: any) {
+      console.error("Direct Firebase Authentication error:", err);
+      let errMsg = "लगइन असफल भयो। युजरनेम वा पासवर्ड गलत छ।";
+      if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password" || err.code === "auth/user-not-found" || err.code === "auth/invalid-email") {
+        errMsg = "लगइन असफल भयो। युजरनेम वा पासवर्ड गलत छ। (Invalid email or password)";
+      } else if (err.code === "auth/too-many-requests") {
+        errMsg = "धेरै प्रयासहरू भएका छन्। कृपया केही समय पछि प्रयास गर्नुहोस्। (Too many attempts. Please try again later.)";
+      } else {
+        errMsg = `प्रमाणीकरण त्रुटि: ${err.message || err}`;
+      }
+      setError(errMsg);
     } finally {
       setLoading(false);
     }
